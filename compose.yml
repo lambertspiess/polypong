@@ -1,0 +1,133 @@
+version: '3'
+services:
+
+  ### Nginx reverse proxy
+  # Also, allow us to fake a same origin API/FRONT, to be closer of production environment
+  nginx:
+    image: nginx
+    # build: ./compose/nginx
+    container_name: nginx
+    volumes:
+      - "./compose/nginx/templates/nginx.conf:/etc/nginx/templates/default.conf.template"
+      - "./compose/nginx/entrypoint/:/docker-entrypoint.d/${DOMAIN_NAME:-localhost}"
+    ports:
+      - "${EXPOSED_PORT_RANGE:-443}:${PORT_RANGE:-443}"
+    environment:
+      - NGINX_SSL_PORT=${PORT_RANGE:-443}
+      - DOMAIN_NAME=${DOMAIN_NAME:-localhost}
+      - SSL_PATH=/etc/ssl/certs/${DOMAIN_NAME:-localhost}
+    logging:
+      driver: none
+    networks:
+      - proxy
+    depends_on:
+      - api
+      - front
+
+  # Front end server for development, should not exist in production version
+  # Built on top of Quasar
+  front:
+    build:
+      context: apps/front
+      target: build
+    image: polypong/front
+    container_name: front
+    expose:
+      - 9000
+    volumes:
+      - ./apps/front:/app/
+      - "/app/node_modules"
+    networks:
+      - proxy
+    env_file:
+      - .env
+    working_dir: /app
+    entrypoint: yarn start
+    stop_signal: SIGINT
+
+  # Api, built on top of NestJS
+  api:
+    build:
+      context: apps/api
+    image: polypong/api
+    container_name: api
+    volumes:
+      - ./apps/api:/app/
+      - "/app/uploads"
+      - "/app/node_modules"
+    expose:
+      - 3000
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV:production
+    working_dir: /app
+    entrypoint: yarn start
+    networks:
+      - database
+      - proxy
+      - mailer
+      # - redis
+    depends_on:
+      postgres:
+        condition: service_healthy
+    stop_signal: SIGINT
+
+  # Cold data (user infos, accounts etc) database
+  postgres:
+    container_name: database
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+    expose:
+      - 5432
+    networks:
+      - database
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d ${POSTGRES_DB} -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    stop_signal: SIGINT
+    volumes: [ 'database:/var/lib/postgresql/data' ]
+    logging:
+      driver: none
+
+  # Hot data (passport session, pong game state, caching) database
+  # redis:
+  #   container_name: redis
+  #   image: redis
+  #   restart: always
+  #   expose:
+  #     - 6379
+  #   networks:
+  #     - redis
+  #   volumes: [ 'redis:/data' ]
+  #   stop_signal: SIGINT
+
+  # Smtp with UI, to see all emails sent across our stack
+  mailhog:
+    image: mailhog/mailhog
+    networks:
+      - mailer
+    expose:
+      - 1025
+    container_name: mailhog
+    restart: always
+    stop_signal: SIGINT
+    logging:
+      driver: none
+
+networks:
+  database:
+  proxy:
+  mailer:
+  # redis:
+
+volumes:
+  database:
+  # redis:

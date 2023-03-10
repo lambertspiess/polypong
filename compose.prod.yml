@@ -1,0 +1,16 @@
+version: '3'
+services:
+  api:
+    environment:
+      - NODE_ENV=PROD
+      - DEBUG=0
+    entrypoint: yarn start:prod
+  front:
+    build:
+      context: apps/front
+      target: build
+    environment:
+      - NODE_ENV=PROD
+      - PROD=true
+      - DEBUG=0
+    entrypoint: yarn start:prod

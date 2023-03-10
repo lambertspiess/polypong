@@ -1,0 +1,16 @@
+**/node_modules
+node_modules
+
+.env
+**/.env
+
+.pnpm-store
+
+.vscode
+**/.vscode
+
+**debug.log
+
+**/*.lock
+
+**/.DS_Store
